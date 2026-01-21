@@ -96,10 +96,33 @@ Modern Security Operations Centers (SOC) face high volumes of telemetry and high
 
 ---
 
-## Evaluation & Metrics 📈
+## Evaluation & Metrics 
+<img width="565" height="413" alt="download" src="https://github.com/user-attachments/assets/0f21b0c9-b39f-4d7b-b3c2-307666575401" />
+
+### Training vs Validation Loss Graph
+
+<img width="500" src="attachment:training_validation_loss.png" />
+
+### Loss Curve Explanation
+
+The graph compares **Training Loss** (blue) and **Validation Loss** (orange) across 50 epochs.
+
+**Key observations:**
+
+* Training loss decreases rapidly and stabilizes around **0.809–0.810**, indicating the model successfully learns baseline behavior.
+* Validation loss starts higher and stabilizes near **0.833–0.834**, which is normal for autoencoders since they reconstruct training data better than unseen data.
+* Both curves flatten without divergence, meaning **no significant overfitting**.
+
+**What this means for SOC use-cases:**
+
+* The model learns a stable baseline of "normal" activity and generalizes well.
+* A consistent gap between training and validation loss is expected and healthy for anomaly detection.
+* This stability ensures reliable reconstruction-error thresholds for detecting anomalous behavior, including zero-day or stealthy attacks.
+
+---
 
 ### Confusion Matrix Visualization
-<img width="734" height="587" alt="image" src="https://github.com/user-attachments/assets/b20c0944-b66d-4b26-a5f8-af4fda521a31" />
+<img width="557" height="453" alt="download" src="https://github.com/user-attachments/assets/9608b663-b205-4be5-b50b-e6d7dec9d528" />
 
 ### Explanation
 
@@ -128,7 +151,7 @@ Such a profile is extremely valuable in SOC operations because it:
 
 ---
 
-## Integration & Deployment 🛰️
+## Integration & Deployment 
 
 **Integration options:**
 
@@ -152,17 +175,20 @@ Such a profile is extremely valuable in SOC operations because it:
 
 ---
 
-## Security & Privacy 🔐
+## Security & Privacy 
 
 * Avoid storing sensitive raw telemetry (PII) in public repos. Sanitize datasets before uploading.
 * When deployed in production, secure model endpoints with mutual TLS and API keys; follow least-privilege data access.
 
 ---
 
-## Future work & roadmap 🗺️
+## Future work & roadmap 
 
 * **LLM-assisted explanations:** convert reconstruction deltas to human-readable hypotheses (e.g., "suspicious PowerShell command args").
 * **Graph-based enrichment:** correlate anomalies across hosts/users with a SOC knowledge graph.
 * **Adaptive thresholding:** dynamic thresholds per-host or per-user baseline.
 * **Hybrid models:** combine autoencoder signals with supervised classifiers for prioritised, labeled incidents.
 
+##
+
+##
