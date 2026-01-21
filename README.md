@@ -165,7 +165,7 @@ Such a profile is extremely valuable in SOC operations because it:
 
 ---
 
-## Quickstart (How recruiters can validate locally)
+## Quickstart (How you can validate locally)
 
 1. Prepare a CSV `bin_data.csv` where the final column is optional `label` and the other columns are numeric features derived from telemetry.
 2. Run the training script (example filename: `train_autoencoder.py`) which trains and outputs a model and a `threshold.json`.
@@ -189,6 +189,3 @@ Such a profile is extremely valuable in SOC operations because it:
 * **Adaptive thresholding:** dynamic thresholds per-host or per-user baseline.
 * **Hybrid models:** combine autoencoder signals with supervised classifiers for prioritised, labeled incidents.
 
-##
-
-##
