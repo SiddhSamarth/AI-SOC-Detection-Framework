@@ -1,23 +1,23 @@
 # Autoencoder-Based SOC Anomaly Detection Framework
 
-Unsupervised deep learning anomaly detection pipeline using a TensorFlow/Keras autoencoder to identify anomalous security telemetry and reduce SOC alert fatigue.
+An unsupervised deep learning anomaly detection pipeline using a TensorFlow/Keras autoencoder to identify anomalous security telemetry and reduce SOC alert noise.
 
 ---
 
 ## Overview
 
-Modern Security Operations Centers (SOC) face overwhelming telemetry volumes and high rates of false-positive alerts. Traditional rule- and signature-based detection mechanisms struggle against novel, multi-stage, or living-off-the-land techniques that produce subtle deviations rather than known IOC matches. 
+Security Operations Centers (SOCs) process large volumes of network telemetry where rule- and signature-based detection can miss unfamiliar or non-signature deviations.
 
-This repository implements an **unsupervised deep learning anomaly detection engine** designed to model baseline benign security telemetry. By compressing incoming feature vectors through a bottleneck layer (64 → 32 → 64) and reconstructing them, the neural network calculates Mean Squared Error (MSE) reconstruction loss. Telemetry with reconstruction loss exceeding a statistical threshold ($\mu + \sigma$) is flagged for SOC analyst triage.
+This repository implements an **unsupervised deep learning anomaly detection prototype** for tabular network connection telemetry. The neural network trains exclusively on normal baseline traffic, compressing incoming feature vectors through a bottleneck layer (64 → 32 → 64) and reconstructing them. By evaluating the Mean Squared Error (MSE) reconstruction loss against an empirical statistical threshold ($\mu + \sigma$), connection records that deviate significantly from baseline patterns are flagged for analyst review.
 
 ---
 
-## What It Does
+## Pipeline Summary
 
-* **Ingests & Preprocesses Telemetry:** Normalizes tabular security log features, handles missing values, and applies standard feature scaling (`StandardScaler`).
-* **Trains Bottleneck Autoencoder:** Learns a compact latent representation of normal network/host behavior using an unsupervised reconstruction objective ($X_{train} \rightarrow X_{train}$).
-* **Dynamic Threshold Calculation:** Calculates an empirical anomaly cutoff based on validation reconstruction error distribution (mean error plus standard deviation).
-* **Batch Scoring & Alerting:** Evaluates streaming or batch security records against the trained model, appends reconstruction error metrics, and outputs flagged incidents to `anomaly_scores.csv`.
+* **Data Preprocessing:** Cleans tabular network connection features, handles missing values via forward fill, and applies `StandardScaler` to normalize numeric features.
+* **Autoencoder Training:** Trains a symmetrical dense neural network to minimize reconstruction error on normal traffic ($X_{train} \rightarrow X_{train}$).
+* **Threshold Calculation:** Establishes an anomaly cutoff based on the validation loss distribution ($\text{Threshold} = \mu + \sigma$).
+* **Inference & Scoring:** Scores incoming batches of connection logs, appends reconstruction error metrics, and outputs flagged records to `anomaly_scores.csv`.
 
 ---
 
