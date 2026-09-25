@@ -8,15 +8,15 @@ An unsupervised deep learning anomaly detection pipeline using a TensorFlow/Kera
 
 Security Operations Centers (SOCs) process large volumes of network telemetry where rule- and signature-based detection can miss unfamiliar or non-signature deviations.
 
-This repository implements an **unsupervised deep learning anomaly detection prototype** for tabular network connection telemetry. The neural network trains exclusively on normal baseline traffic, compressing incoming feature vectors through a bottleneck layer (64 → 32 → 64) and reconstructing them. By evaluating the Mean Squared Error (MSE) reconstruction loss against an empirical statistical threshold ($\mu + \sigma$), connection records that deviate significantly from baseline patterns are flagged for analyst review.
+This repository implements an **unsupervised deep learning anomaly detection prototype** for tabular network connection telemetry. The neural network compresses feature vectors through a bottleneck layer (64 → 32 → 64) and reconstructs them. It is fitted on the full 80% training split without using the labels. That split is **not** filtered to normal traffic: in the bundled dataset, about 53% of records are labelled `normal` and 47% `abnormal`. Records whose Mean Squared Error (MSE) reconstruction loss exceeds an empirical threshold ($\mu + \sigma$, computed on the held-out 20% split) are flagged for analyst review.
 
 ---
 
 ## Pipeline Summary
 
 * **Data Preprocessing:** Cleans tabular network connection features, handles missing values via forward fill, and applies `StandardScaler` to normalize numeric features.
-* **Autoencoder Training:** Trains a symmetrical dense neural network to minimize reconstruction error on normal traffic ($X_{train} \rightarrow X_{train}$).
-* **Threshold Calculation:** Establishes an anomaly cutoff based on the validation loss distribution ($\text{Threshold} = \mu + \sigma$).
+* **Autoencoder Training:** Trains a symmetrical dense neural network to minimize reconstruction error on the unfiltered training split, which contains both normal and attack records ($X_{train} \rightarrow X_{train}$).
+* **Threshold Calculation:** Establishes an anomaly cutoff from the per-record reconstruction error on the held-out 20% test split, the same split used as Keras validation data ($\text{Threshold} = \mu + \sigma$).
 * **Inference & Scoring:** Scores incoming batches of connection logs, appends reconstruction error metrics, and outputs flagged records to `anomaly_scores.csv`.
 
 ---
@@ -24,7 +24,7 @@ This repository implements an **unsupervised deep learning anomaly detection pro
 ## Features
 
 * **Symmetrical Autoencoder Architecture:** Input($D$) → Dense(64, ReLU) → Dense(32, ReLU) → Dense(64, ReLU) → Dense($D$, Sigmoid).
-* **Unsupervised Baseline Modeling:** Requires no manual labeling of attack categories during training; models normal operational baselines.
+* **Label-Free Training:** The `label` column is dropped before fitting and is not used to select training records, so the model learns the dominant patterns of the mixed training traffic rather than a clean normal-only baseline.
 * **Persistent Artifact Pipeline:** Serializes the trained neural network (`models/autoencoder.h5`), feature scalers (`scaler.pkl`), label encoders (`label_encoder.pkl`), and threshold cutoff (`threshold.json`).
 * **CI Validation:** Includes GitHub Actions workflow (`.github/workflows/pylint.yml`) for automated Python linting and code quality validation.
 
@@ -32,9 +32,9 @@ This repository implements an **unsupervised deep learning anomaly detection pro
 
 ## Technologies
 
-* **Deep Learning Framework:** TensorFlow 2.x, Keras (`Sequential`, `Dense`, `Input`, `MeanSquaredError`)
+* **Deep Learning Framework:** TensorFlow 2.x, Keras (`Sequential`, `Dense`, `Input`)
 * **Machine Learning & Preprocessing:** Scikit-Learn (`StandardScaler`, `LabelEncoder`, `train_test_split`)
-* **Data Processing & Scientific Computing:** Python 3.10+, Pandas, NumPy
+* **Data Processing & Scientific Computing:** Python 3.8–3.10 (CI matrix), Pandas, NumPy
 * **CI/CD:** GitHub Actions (Pylint)
 
 ---
@@ -59,7 +59,7 @@ This repository implements an **unsupervised deep learning anomaly detection pro
            ▼
 [ Reconstruction Error Calculation (MSE) ]
            │
-           ├── If Loss <= Threshold (μ + σ) ──> Normal Baseline Activity
+           ├── If Loss <= Threshold (μ + σ) ──> Not Flagged
            └── If Loss >  Threshold (μ + σ) ──> Flagged Anomaly (SOC Alert)
 ```
 
@@ -141,13 +141,14 @@ Results will be exported to `anomaly_scores.csv` containing the original feature
 </p>
 
 * **Convergence Profile:** Training loss stabilizes near `0.809–0.810`, while validation loss stabilizes near `0.833–0.834` across 50 epochs without divergent overfitting.
-* **Separation Capability:** When evaluated against benchmark validation holdouts with injected attack classes, the model achieves distinct separation between normal baseline reconstruction error and high-loss anomalous vectors.
+* **Detection Performance:** Not yet evaluated in this repository. `anomaly_scores.csv` keeps the original `label` column next to `predicted_label`, but no precision/recall/ROC evaluation is included. Detection rates, including against previously unseen (zero-day) attack types, are therefore not demonstrated.
 
 ---
 
 ## Project Status & Limitations
 
 * **Current Status:** Functional Machine Learning Prototype.
+* **Mixed Training Data:** Training is not restricted to normal traffic, so attack patterns that are common in the training split can be reconstructed well and go unflagged. The threshold is also computed on mixed held-out data. Training on normal-only records would change the model's behavior and would require re-running and re-documenting the results above.
 * **Telemetry Domain:** Trained on tabular network connection telemetry; requires domain-specific feature engineering (e.g., failed logon rates, session durations, bytes transferred) when adapting to Sysmon or CloudTrail logs.
 * **Threshold Drift:** In production environments, statistical thresholds should be recalculated periodically or segmented by endpoint cluster (e.g., developer workstation vs. production domain controller) to account for operational drift.
 
