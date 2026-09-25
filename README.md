@@ -1,191 +1,161 @@
-# Autoencoder-Based Anomaly Detection for Cybersecurity & SOC Operations 
+# Autoencoder-Based SOC Anomaly Detection Framework
 
-## TL;DR 
-
-A production-orientated autoencoder pipeline that learns baseline behavior from security telemetry and flags anomalous events indicating possible intrusions, insider threats, or zero-day activity. Designed for integration with SIEM/SOAR platforms to reduce alert fatigue and surface high-fidelity incidents for SOC analysts.
+Unsupervised deep learning anomaly detection pipeline using a TensorFlow/Keras autoencoder to identify anomalous security telemetry and reduce SOC alert fatigue.
 
 ---
 
-## Why this project exists (Purpose) 
+## Overview
 
-Modern Security Operations Centers (SOC) face high volumes of telemetry and high rates of false positives. Traditional signature-based detection misses zero-day and polymorphic attacks. This project provides an **unsupervised, behaviour-drivenbehaviour detection engine** using an autoencoder neural network that models normal system/network behavior and highlights deviations as potential security incidents.
+Modern Security Operations Centers (SOC) face overwhelming telemetry volumes and high rates of false-positive alerts. Traditional rule- and signature-based detection mechanisms struggle against novel, multi-stage, or living-off-the-land techniques that produce subtle deviations rather than known IOC matches. 
 
----
-
-## Problem it solves 
-
-* **Detects unknown/zero-day attacks** by focusing on deviations from baseline behaviour rather than signatures.
-* **Reduces alert noise** by prioritizing events with high reconstruction error and configurable risk scoring.
-* **Operates without large labeled datasets**, addressing the common problem that security data is expensive or impractical to label at scale.
-* **Scales to multiple telemetry types** (Sysmon, Windows Event Logs, Zeek/Suricata, OSQuery-derived features) via a standardized preprocessing pipeline.
+This repository implements an **unsupervised deep learning anomaly detection engine** designed to model baseline benign security telemetry. By compressing incoming feature vectors through a bottleneck layer (64 → 32 → 64) and reconstructing them, the neural network calculates Mean Squared Error (MSE) reconstruction loss. Telemetry with reconstruction loss exceeding a statistical threshold ($\mu + \sigma$) is flagged for SOC analyst triage.
 
 ---
 
-## Benefits — why recruiters/teams should care 
+## What It Does
 
-* **Immediate SOC value:** Lowers mean time to detect (MTTD) by surfacing behaviour-based anomalies that escape signature detection.
-* **Detects stealthy threats:** Effective against living-off-the-land techniques, fileless attacks, and unusual multi-stage activity.
-* **Practical deployment:** Designed for integration with Splunk, Elastic, Wazuh, or Azure Sentinel as an anomaly scoring microservice.
-* **Reduced analyst workload:** Prioritised anomaly scoring and human-readable explanations (reconstruction delta) enable faster triage.
-* **Resume-grade engineering:** Demonstrates detection engineering, ML pipeline design, and SOC integration skills.
+* **Ingests & Preprocesses Telemetry:** Normalizes tabular security log features, handles missing values, and applies standard feature scaling (`StandardScaler`).
+* **Trains Bottleneck Autoencoder:** Learns a compact latent representation of normal network/host behavior using an unsupervised reconstruction objective ($X_{train} \rightarrow X_{train}$).
+* **Dynamic Threshold Calculation:** Calculates an empirical anomaly cutoff based on validation reconstruction error distribution (mean error plus standard deviation).
+* **Batch Scoring & Alerting:** Evaluates streaming or batch security records against the trained model, appends reconstruction error metrics, and outputs flagged incidents to `anomaly_scores.csv`.
 
 ---
 
-## How it works (High-level pipeline) 
+## Features
 
-1. **Ingest & normalize** telemetry into a tabular feature set (Elastic Common Schema recommended).
+* **Symmetrical Autoencoder Architecture:** Input($D$) → Dense(64, ReLU) → Dense(32, ReLU) → Dense(64, ReLU) → Dense($D$, Sigmoid).
+* **Unsupervised Baseline Modeling:** Requires no manual labeling of attack categories during training; models normal operational baselines.
+* **Persistent Artifact Pipeline:** Serializes the trained neural network (`models/autoencoder.h5`), feature scalers (`scaler.pkl`), label encoders (`label_encoder.pkl`), and threshold cutoff (`threshold.json`).
+* **CI Validation:** Includes GitHub Actions workflow (`.github/workflows/pylint.yml`) for automated Python linting and code quality validation.
 
-```
-          ┌──────────────┐
-          │ Raw Logs 🌐   │
-          └──────┬───────┘
-                 ▼
-        ┌──────────────────┐
-        │ Feature Builder 🔧│
-        └──────┬───────────┘
-                 ▼
-```
+---
 
-2. **Preprocessing:** missing-value handling, label encoding (optional), and feature scaling (StandardScaler).
+## Technologies
 
-```
-        ┌────────────────────────┐
-        │ Preprocessing Engine ⚙️ │
-        └─────────┬──────────────┘
-                  ▼
-```
+* **Deep Learning Framework:** TensorFlow 2.x, Keras (`Sequential`, `Dense`, `Input`, `MeanSquaredError`)
+* **Machine Learning & Preprocessing:** Scikit-Learn (`StandardScaler`, `LabelEncoder`, `train_test_split`)
+* **Data Processing & Scientific Computing:** Python 3.10+, Pandas, NumPy
+* **CI/CD:** GitHub Actions (Pylint)
 
-3. **Train Autoencoder** on baseline (benign) telemetry.
+---
+
+## Architecture & Workflow
 
 ```
-     ┌─────────────────────────┐
-     │ Autoencoder Model 🤖     │
-     ├─────────────────────────┤
-     │ Learns normal behavior  │
-     │ through reconstruction  │
-     └──────────┬──────────────┘
-                ▼
-```
-
-4. **Score events**: compute reconstruction error (MSE).
-
-```
-     ┌─────────────────────────┐
-     │ Error Scoring Engine 📊 │
-     └──────────┬──────────────┘
-                ▼
-```
-
-5. **Flag anomalies**: identify deviations and forward for SOC review.
-
-```
-    ┌────────────────────────┐
-    │ Anomaly Alerts 🚨       │
-    └────────────────────────┘
+[ Raw Security Telemetry ]
+           │
+           ▼
+[ Feature Preprocessing (StandardScaler) ]
+           │
+           ▼
+┌──────────────────────────────────────────────┐
+│       Autoencoder Bottleneck Network         │
+│  Input(D) ──> Dense(64) ──> Bottleneck(32)   │
+│                   │                          │
+│                   ▼                          │
+│  Output(D) <── Dense(64) <── Latent Vector   │
+└──────────────────────────────────────────────┘
+           │
+           ▼
+[ Reconstruction Error Calculation (MSE) ]
+           │
+           ├── If Loss <= Threshold (μ + σ) ──> Normal Baseline Activity
+           └── If Loss >  Threshold (μ + σ) ──> Flagged Anomaly (SOC Alert)
 ```
 
 ---
 
-## Model & Technical Details
+## Repository Structure
 
-* **Model type:** Fully-connected Autoencoder (encoder bottleneck + symmetric decoder).
-* **Typical architecture:** Input → Dense(64) → Dense(32) → Dense(64) → Output (input_dim).
-* **Loss:** Mean Squared Error (MSE) between input and reconstruction.
-* **Training:** unsupervised; X_train = X_train (reconstruction objective).
-* **Anomaly threshold:** choose via percentile-based method on validation reconstruction errors (e.g., 95th–99th percentile) or using ROC on a labelledautoencoder holdout if available.
-
----
-
-## Evaluation & Metrics 
-<img width="565" height="413" alt="download" src="https://github.com/user-attachments/assets/0f21b0c9-b39f-4d7b-b3c2-307666575401" />
-
-### Training vs Validation Loss Graph
-
-<img width="500" src="attachment:training_validation_loss.png" />
-
-### Loss Curve Explanation
-
-The graph compares **Training Loss** (blue) and **Validation Loss** (orange) across 50 epochs.
-
-**Key observations:**
-
-* Training loss decreases rapidly and stabilizes around **0.809–0.810**, indicating the model successfully learns baseline behavior.
-* Validation loss starts higher and stabilizes near **0.833–0.834**, which is normal for autoencoders since they reconstruct training data better than unseen data.
-* Both curves flatten without divergence, meaning **no significant overfitting**.
-
-**What this means for SOC use-cases:**
-
-* The model learns a stable baseline of "normal" activity and generalizes well.
-* A consistent gap between training and validation loss is expected and healthy for anomaly detection.
-* This stability ensures reliable reconstruction-error thresholds for detecting anomalous behavior, including zero-day or stealthy attacks.
+```
+AI-SOC-Detection-Framework/
+├── .github/
+│   └── workflows/
+│       └── pylint.yml          # Automated CI linting workflow
+├── bin_data.rar                # Compressed security telemetry dataset
+├── requirements.txt            # Python package dependencies
+├── train_autoencoder.py        # Model training and threshold calculation pipeline
+├── score_autoencoder.py        # Telemetry scoring and anomaly classification script
+└── README.md                   # Technical documentation and operational guide
+```
 
 ---
 
-### Confusion Matrix Visualization
-<img width="557" height="453" alt="download" src="https://github.com/user-attachments/assets/9608b663-b205-4be5-b50b-e6d7dec9d528" />
+## Setup & Usage
 
-### Explanation
+### 1. Prerequisites & Environment Setup
 
-The confusion matrix above reflects the model's **prediction performance** after converting reconstruction errors into class predictions.
+Clone the repository and set up a Python virtual environment:
 
-* **Top-left (11773)**: True Negatives — normal events correctly classified.
-* **Top-right (0)**: False Positives — none, meaning no normal events were misclassified as anomalies.
-* **Bottom-left (0)**: False Negatives — none, indicating the model did not miss any malicious/anomalous events.
-* **Bottom-right (13422)**: True Positives — anomalies correctly flagged.
+```bash
+git clone https://github.com/SiddhSamarth/AI-SOC-Detection-Framework.git
+cd AI-SOC-Detection-Framework
 
-### Interpretation
+# Create virtual environment
+python -m venv venv
+# On Windows:
+.\venv\Scripts\activate
+# On Linux/macOS:
+source venv/bin/activate
 
-This result indicates **near-perfect separation** between the reconstruction error distributions of normal and anomalous classes. The autoencoder successfully learned the baseline behavior and is able to discriminate deviations with high accuracy.
+# Install dependencies
+pip install -r requirements.txt
+```
 
-Such a profile is extremely valuable in SOC operations because it:
+### 2. Dataset Preparation
 
-* Reduces false alarms
-* Detects anomalous or malicious behavior reliably
-* Allows analysts to trust model-driven alerting workflows
+The training and evaluation dataset is packaged in `bin_data.rar` (containing tabular network connection telemetry). You must extract it before running the pipeline:
 
----
+* **Using 7-Zip (Windows):**
+  Right-click `bin_data.rar` → Extract to `bin_data.csv` (or create a `data/` folder and extract to `data/bin_data.csv`).
+* **Using UnRAR (Linux):**
+  ```bash
+  mkdir -p data
+  unrar e bin_data.rar data/
+  ```
 
-* **Primary signal:** reconstruction error distribution (visual inspection + statistical thresholding).
-* **Metrics (when labels are available):** Precision, Recall, F1-score, AUC-ROC calculated by converting reconstruction errors into binary predictions.
-* **Operational metrics:** Alert volume reduction, MTTD improvement, analyst time saved (qualitative/quantitative in production).
+### 3. Training the Autoencoder
 
----
+Execute `train_autoencoder.py`. The script will load the telemetry, fit the scaler and encoder, train the autoencoder across 50 epochs, compute the statistical cutoff threshold, and save all artifacts in `models/`:
 
-## Integration & Deployment 
+```bash
+python train_autoencoder.py
+```
 
-**Integration options:**
+### 4. Scoring Incoming Logs
 
-* Expose a lightweight REST API (FastAPI) that accepts telemetry vectors and returns anomaly score + reconstruction details.
-* Batch scoring via scheduled jobs that annotate SIEM indices (e.g., Elastic ingest pipeline).
-* Wrap as a Docker container for portability; use Kubernetes for scale.
+To evaluate new telemetry against the trained model and output flagged anomalies:
 
-**Suggested architecture:**
+```bash
+python score_autoencoder.py
+```
 
-* Data collection (ETL from endpoint agents) → Preprocessor (feat. engineering) → Model scoring service → SIEM enrichment & alerting → Analyst dashboard / SOAR playbooks.
-
----
-
-## Quickstart (How you can validate locally)
-
-1. Prepare a CSV `bin_data.csv` where the final column is optional `label` and the other columns are numeric features derived from telemetry.
-2. Run the training script (example filename: `train_autoencoder.py`) which trains and outputs a model and a `threshold.json`.
-3. Run the scoring script (example filename: `score_batch.py`) to produce `anomaly_scores.csv` with columns: `record_id`, `reconstruction_error`, `is_anomaly`.
-
-*Note: include the training and scoring scripts in the repo for immediate reproduction.*
-
----
-
-## Security & Privacy 
-
-* Avoid storing sensitive raw telemetry (PII) in public repos. Sanitize datasets before uploading.
-* When deployed in production, secure model endpoints with mutual TLS and API keys; follow least-privilege data access.
+Results will be exported to `anomaly_scores.csv` containing the original features, `reconstruction_error`, and `predicted_label` (0 = normal, 1 = anomaly).
 
 ---
 
-## Future work & roadmap 
+## Model Evaluation & Performance
 
-* **LLM-assisted explanations:** convert reconstruction deltas to human-readable hypotheses (e.g., "suspicious PowerShell command args").
-* **Graph-based enrichment:** correlate anomalies across hosts/users with a SOC knowledge graph.
-* **Adaptive thresholding:** dynamic thresholds per-host or per-user baseline.
-* **Hybrid models:** combine autoencoder signals with supervised classifiers for prioritised, labeled incidents.
+<p align="center">
+  <img width="560" alt="Training vs Validation Loss" src="https://github.com/user-attachments/assets/0f21b0c9-b39f-4d7b-b3c2-307666575401" />
+</p>
 
+* **Convergence Profile:** Training loss stabilizes near `0.809–0.810`, while validation loss stabilizes near `0.833–0.834` across 50 epochs without divergent overfitting.
+* **Separation Capability:** When evaluated against benchmark validation holdouts with injected attack classes, the model achieves distinct separation between normal baseline reconstruction error and high-loss anomalous vectors.
+
+---
+
+## Project Status & Limitations
+
+* **Current Status:** Functional Machine Learning Prototype.
+* **Telemetry Domain:** Trained on tabular network connection telemetry; requires domain-specific feature engineering (e.g., failed logon rates, session durations, bytes transferred) when adapting to Sysmon or CloudTrail logs.
+* **Threshold Drift:** In production environments, statistical thresholds should be recalculated periodically or segmented by endpoint cluster (e.g., developer workstation vs. production domain controller) to account for operational drift.
+
+---
+
+## Author & Contact
+
+* **Author:** Siddh Samarth
+* **GitHub:** [@SiddhSamarth](https://github.com/SiddhSamarth)
+* **Portfolio:** [siddhsamarth.in](https://siddhsamarth.in)
+* **LinkedIn:** [samarthsiddh](https://www.linkedin.com/in/siddhsamarth/)
