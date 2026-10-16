@@ -28,7 +28,7 @@ DATASET_CANDIDATES = ("data/bin_data.csv", "bin_data.csv")
 LABEL_COLUMN = "label"
 MODEL_DIRECTORY = Path("models")
 DEFAULT_SEED = 42
-NORMAL_LABEL_CANDIDATES = ("normal", "benign", "legitimate", "background", "0", "false")
+NORMAL_LABEL_CANDIDATES = ("normal", "benign", "legitimate", "background")
 
 
 def load_data(path: str | Path) -> pd.DataFrame:
