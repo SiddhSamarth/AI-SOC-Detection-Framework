@@ -109,10 +109,8 @@ def split_indices(
         random_state=seed,
         stratify=binary_labels[development],
     )
-    if len(set(training) & set(calibration) or set()) or len(set(training) & set(test)):
+    if set(training) & set(calibration) or set(training) & set(test) or set(calibration) & set(test):
         raise RuntimeError("Internal split error: partitions overlap.")
-    if len(set(calibration) & set(test)):
-        raise RuntimeError("Internal split error: calibration and test overlap.")
     return np.asarray(training), np.asarray(calibration), np.asarray(test)
 
 
