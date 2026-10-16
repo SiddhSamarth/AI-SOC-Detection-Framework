@@ -11,12 +11,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from train_autoencoder import LABEL_COLUMN, MODEL_DIRECTORY, find_dataset
+import train_autoencoder
 
 
 def load_artifacts():
     """Load only the model and preprocessing artifacts created by training."""
-    model_path = MODEL_DIRECTORY / "autoencoder.keras"
+    model_directory = train_autoencoder.MODEL_DIRECTORY
+    model_path = model_directory / "autoencoder.keras"
     if not model_path.is_file():
         raise FileNotFoundError(
             f"Trained model not found at {model_path}. Run train_autoencoder.py first."
@@ -24,11 +25,11 @@ def load_artifacts():
     from tensorflow.keras.models import load_model
 
     model = load_model(model_path, compile=False)
-    with (MODEL_DIRECTORY / "preprocessor.pkl").open("rb") as handle:
+    with (model_directory / "preprocessor.pkl").open("rb") as handle:
         preprocessor = pickle.load(handle)
-    with (MODEL_DIRECTORY / "feature_columns.json").open("r", encoding="utf-8") as handle:
+    with (model_directory / "feature_columns.json").open("r", encoding="utf-8") as handle:
         feature_columns = json.load(handle)
-    with (MODEL_DIRECTORY / "threshold.json").open("r", encoding="utf-8") as handle:
+    with (model_directory / "threshold.json").open("r", encoding="utf-8") as handle:
         threshold_info = json.load(handle)
     threshold = float(threshold_info["threshold"])
     if not np.isfinite(threshold):
@@ -39,7 +40,7 @@ def load_artifacts():
 def prepare_features(data: pd.DataFrame, feature_columns: list[str]) -> pd.DataFrame:
     """Validate and order scoring features to match the training schema."""
     matching_label = [
-        column for column in data.columns if str(column).strip().lower() == LABEL_COLUMN
+        column for column in data.columns if str(column).strip().lower() == train_autoencoder.LABEL_COLUMN
     ]
     features = data.drop(columns=matching_label, errors="ignore").copy()
     missing = [column for column in feature_columns if column not in features.columns]
@@ -84,7 +85,7 @@ def main() -> int:
     parser.add_argument("--data", type=Path, help="CSV path; defaults to data/bin_data.csv or bin_data.csv")
     parser.add_argument("--output", type=Path, default=Path("anomaly_scores.csv"), help="Output CSV path")
     args = parser.parse_args()
-    target_path = args.data or find_dataset()
+    target_path = args.data or train_autoencoder.find_dataset()
     if target_path is None:
         parser.error("Dataset not found. Extract bin_data.rar to data/bin_data.csv or pass --data.")
     try:
