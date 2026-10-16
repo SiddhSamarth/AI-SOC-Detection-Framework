@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+# Local data extracted from the bundled archive
+data/
+bin_data.csv
+
+# Generated model and scoring outputs
+models/
+anomaly_scores.csv
