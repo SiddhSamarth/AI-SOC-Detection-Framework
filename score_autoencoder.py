@@ -1,74 +1,99 @@
-"""Score telemetry with the trained autoencoder and flag high-reconstruction-error records."""
-import os
+"""Score network telemetry with a trained normal-only autoencoder."""
+
+from __future__ import annotations
+
+import argparse
 import json
 import pickle
-import pandas as pd
+import sys
+from pathlib import Path
+
 import numpy as np
-from keras.models import load_model
-from train_autoencoder import find_dataset
+import pandas as pd
+
+import train_autoencoder
 
 
 def load_artifacts():
-    """Load the model, scaler, label encoder and threshold saved by training."""
-    # Inference only needs predict(); skipping compile avoids Keras 3 failing to
-    # deserialize the legacy 'mse' loss stored in the HDF5 file.
-    model = load_model("models/autoencoder.h5", compile=False)
-    with open("models/scaler.pkl", "rb") as f:
-        scaler = pickle.load(f)
-    with open("models/label_encoder.pkl", "rb") as f:
-        le = pickle.load(f)
-    with open("models/threshold.json", "r", encoding="utf-8") as f:
-        threshold = json.load(f)["threshold"]
-    return model, scaler, le, threshold
-
-
-def preprocess(df, scaler):
-    """Apply the fitted scaler to the raw feature frame."""
-    return scaler.transform(df)
-
-
-def compute_scores(model, features):
-    """Return the per-record reconstruction MSE for ``features``."""
-    recon = model.predict(features)
-    return np.mean(np.square(features - recon), axis=1)
-
-
-def classify(errors, threshold):
-    """Label records whose error exceeds ``threshold`` as anomalies (1), else 0."""
-    return (errors > threshold).astype(int)
-
-
-def score_pipeline(data_path):
-    """Score ``data_path`` and write per-record results to ``anomaly_scores.csv``."""
-    if not os.path.exists("models/autoencoder.h5"):
-        print(
-            "Error: Trained model 'models/autoencoder.h5' not found. "
-            "Please run train_autoencoder.py first."
+    """Load only the model and preprocessing artifacts created by training."""
+    model_directory = train_autoencoder.MODEL_DIRECTORY
+    model_path = model_directory / "autoencoder.keras"
+    if not model_path.is_file():
+        raise FileNotFoundError(
+            f"Trained model not found at {model_path}. Run train_autoencoder.py first."
         )
-        return
+    from tensorflow.keras.models import load_model
 
-    print(f"Loading trained artifacts and scoring {data_path}...")
-    model, scaler, _, threshold = load_artifacts()
-    df = pd.read_csv(data_path)
-    df.ffill(inplace=True)
-    raw = df.drop("label", axis=1) if "label" in df.columns else df
-    features = preprocess(raw, scaler)
-    errors = compute_scores(model, features)
-    preds = classify(errors, threshold)
-    df["reconstruction_error"] = errors
-    df["predicted_label"] = preds
-    df.to_csv("anomaly_scores.csv", index=False)
-    print(f"Scoring complete. Flagged {preds.sum()} anomalies out of {len(preds)} total events.")
-    print("Results saved to anomaly_scores.csv.")
+    model = load_model(model_path, compile=False)
+    with (model_directory / "preprocessor.pkl").open("rb") as handle:
+        preprocessor = pickle.load(handle)
+    with (model_directory / "feature_columns.json").open("r", encoding="utf-8") as handle:
+        feature_columns = json.load(handle)
+    with (model_directory / "threshold.json").open("r", encoding="utf-8") as handle:
+        threshold_info = json.load(handle)
+    threshold = float(threshold_info["threshold"])
+    if not np.isfinite(threshold):
+        raise ValueError("Stored threshold is not finite.")
+    return model, preprocessor, feature_columns, threshold
+
+
+def prepare_features(data: pd.DataFrame, feature_columns: list[str]) -> pd.DataFrame:
+    """Validate and order scoring features to match the training schema."""
+    matching_label = [
+        column for column in data.columns if str(column).strip().lower() == train_autoencoder.LABEL_COLUMN
+    ]
+    features = data.drop(columns=matching_label, errors="ignore").copy()
+    missing = [column for column in feature_columns if column not in features.columns]
+    if missing:
+        raise ValueError(f"Scoring input is missing required feature columns: {missing}")
+    extra = [column for column in features.columns if column not in feature_columns]
+    if extra:
+        print(f"Ignoring {len(extra)} feature column(s) not used during training.", file=sys.stderr)
+    features = features[feature_columns].replace([np.inf, -np.inf], np.nan)
+    if features.empty:
+        raise ValueError("The scoring input contains no records.")
+    return features
+
+
+def score_pipeline(data_path: str | Path, output_path: str | Path = "anomaly_scores.csv") -> int:
+    """Score records, preserving the source rows and adding error/decision columns."""
+    raw_data = pd.read_csv(data_path)
+    if raw_data.empty:
+        raise ValueError("The scoring CSV contains no records.")
+    model, preprocessor, feature_columns, threshold = load_artifacts()
+    features = prepare_features(raw_data, feature_columns)
+    matrix = np.asarray(preprocessor.transform(features), dtype=np.float32)
+    if not np.isfinite(matrix).all():
+        raise ValueError("Preprocessing produced NaN or infinite values; inspect the scoring data.")
+
+    reconstructed = model.predict(matrix, verbose=0)
+    errors = np.mean(np.square(matrix - reconstructed), axis=1)
+    results = raw_data.copy()
+    results["reconstruction_error"] = errors
+    results["threshold"] = threshold
+    results["predicted_label"] = (errors > threshold).astype(np.int8)
+    results.to_csv(output_path, index=False)
+    print(
+        f"Scored {len(results)} records; flagged {int(results['predicted_label'].sum())}. "
+        f"Results saved to {output_path}."
+    )
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data", type=Path, help="CSV path; defaults to data/bin_data.csv or bin_data.csv")
+    parser.add_argument("--output", type=Path, default=Path("anomaly_scores.csv"), help="Output CSV path")
+    args = parser.parse_args()
+    target_path = args.data or train_autoencoder.find_dataset()
+    if target_path is None:
+        parser.error("Dataset not found. Extract bin_data.rar to data/bin_data.csv or pass --data.")
+    try:
+        return score_pipeline(target_path, args.output)
+    except (ValueError, OSError, KeyError, pickle.PickleError) as exc:
+        parser.exit(2, f"Error: {exc}\n")
+    return 0
 
 
 if __name__ == "__main__":
-    target_path = find_dataset()
-    if target_path:
-        score_pipeline(target_path)
-    else:
-        print("Error: Dataset not found.")
-        print(
-            "Please uncompress 'bin_data.rar' into 'data/bin_data.csv' or 'bin_data.csv' "
-            "before running score_autoencoder.py."
-        )
+    raise SystemExit(main())
