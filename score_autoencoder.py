@@ -10,7 +10,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from tensorflow.keras.models import load_model
 
 from train_autoencoder import LABEL_COLUMN, MODEL_DIRECTORY, find_dataset
 
@@ -22,6 +21,8 @@ def load_artifacts():
         raise FileNotFoundError(
             f"Trained model not found at {model_path}. Run train_autoencoder.py first."
         )
+    from tensorflow.keras.models import load_model
+
     model = load_model(model_path, compile=False)
     with (MODEL_DIRECTORY / "preprocessor.pkl").open("rb") as handle:
         preprocessor = pickle.load(handle)
