@@ -25,6 +25,14 @@ class LabelMappingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Could not safely infer"):
             map_labels(pd.Series(["clean-traffic", "intrusion", "intrusion"]))
 
+    def test_numeric_labels_require_explicit_normal_class(self):
+        labels = pd.Series([0, 1, 0, 1])
+        with self.assertRaisesRegex(ValueError, "Could not safely infer"):
+            map_labels(labels)
+        mapped, normal_label = map_labels(labels, normal_label="0")
+        self.assertEqual(normal_label, "0")
+        self.assertEqual(mapped.tolist(), [0, 1, 0, 1])
+
 
 class SplitTests(unittest.TestCase):
     def test_partitions_are_disjoint_and_stratified(self):
