@@ -59,7 +59,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Extract `bin_data.rar` so that the CSV is located at `data/bin_data.csv` or `bin_data.csv`. The CSV must contain a `label` column and feature columns. The program attempts to infer the normal class from common labels such as `normal`, `benign`, `legitimate`, `background` or `0`. When the dataset uses a different label, pass it explicitly.
+Extract `bin_data.rar` so that the CSV is located at `data/bin_data.csv` or `bin_data.csv`. The CSV must contain a `label` column and feature columns. The program attempts to infer the normal class from descriptive labels such as `normal`, `benign`, `legitimate` or `background`. Numeric labels are ambiguous; pass the correct value explicitly, for example `--normal-label 0`, rather than relying on an assumption.
 
 ## Train and evaluate
 
